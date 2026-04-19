@@ -4,7 +4,7 @@ FROM python:3.12-slim AS builder
 WORKDIR /app
 
 # Install dependencies terlebih dahulu (layer caching)
-COPY requirements.txt .
+COPY app/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
@@ -21,7 +21,7 @@ COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin/gunicorn /usr/local/bin/gunicorn
 
 # Copy source code aplikasi
-COPY --chown=appuser:appuser . .
+COPY --chown=appuser:appuser app/ .
 
 # Jalankan sebagai user non-root
 USER appuser
