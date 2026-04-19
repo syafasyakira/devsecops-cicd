@@ -8,10 +8,11 @@ pipeline {
     }
 
     environment {
-        IMAGE_NAME     = "${JOB_NAME}"
+        JOB_BASE_NAME  = "${JOB_NAME.split('/').last()}"
+        IMAGE_NAME     = "${JOB_BASE_NAME}"
         IMAGE_TAG      = "${BUILD_NUMBER}"
         IMAGE_PREV_TAG = "${BUILD_NUMBER.toInteger() - 1}"
-        CONTAINER_NAME = "${JOB_NAME}-app"
+        CONTAINER_NAME = "${JOB_BASE_NAME}-app"
         APP_PORT       = "8084"   // Ganti per kelompok: 8081 / 8082 / 8083 / 8084
     }
 
