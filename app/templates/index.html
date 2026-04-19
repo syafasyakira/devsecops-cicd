@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CI/CD Demo App</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 600px;
+            width: 90%;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.4);
+        }
+        .badge {
+            display: inline-block;
+            background: #00d4aa;
+            color: #1a1a2e;
+            font-weight: bold;
+            font-size: 0.75rem;
+            padding: 4px 12px;
+            border-radius: 20px;
+            margin-bottom: 20px;
+            letter-spacing: 1px;
+        }
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, #00d4aa, #7b2ff7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            color: rgba(255,255,255,0.6);
+            margin-bottom: 32px;
+            font-size: 0.95rem;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .info-item {
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .info-label {
+            font-size: 0.7rem;
+            color: rgba(255,255,255,0.4);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+        .info-value {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #00d4aa;
+            word-break: break-all;
+        }
+        .pipeline-flow {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 0.85rem;
+            color: rgba(255,255,255,0.7);
+        }
+        .pipeline-flow .step {
+            display: flex;
+            align-items: center;
+            margin: 4px 0;
+        }
+        .dot { 
+            width: 8px; height: 8px; 
+            border-radius: 50%; 
+            background: #00d4aa;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+        .footer {
+            margin-top: 24px;
+            text-align: center;
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="badge">✓ DEPLOYED</div>
+        <h1>CI/CD Demo App</h1>
+        <p class="subtitle">Aplikasi web container yang di-deploy otomatis via Jenkins Pipeline</p>
+
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Hostname (Server)</div>
+                <div class="info-value">{{ hostname }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">App Version</div>
+                <div class="info-value">{{ version }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Build Number</div>
+                <div class="info-value">#{{ build }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Deploy Time</div>
+                <div class="info-value" style="font-size:0.85rem">{{ timestamp }}</div>
+            </div>
+        </div>
+
+        <div class="pipeline-flow">
+            <strong style="color:white; display:block; margin-bottom:8px">Pipeline Stages:</strong>
+            <div class="step"><div class="dot"></div> Checkout — Clone dari Git repository</div>
+            <div class="step"><div class="dot"></div> Build — Docker build image</div>
+            <div class="step"><div class="dot"></div> Test — Unit test dalam container</div>
+            <div class="step"><div class="dot"></div> Push — Upload image ke Docker Hub</div>
+            <div class="step"><div class="dot"></div> Deploy — SSH ke 4 App Server</div>
+            <div class="step"><div class="dot"></div> Health Check — Verifikasi container</div>
+        </div>
+
+        <div class="footer">
+            DevSecOps Lab &bull; Universitas Brawijaya &bull; 2025/2026
+        </div>
+    </div>
+</body>
+</html>

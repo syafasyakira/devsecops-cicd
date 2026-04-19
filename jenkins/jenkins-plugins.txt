@@ -1,0 +1,11 @@
+// Plugin wajib untuk lab ini
+// Install via: Manage Jenkins → Plugins → Available
+git
+pipeline
+workflow-aggregator
+ssh-agent
+docker-workflow
+credentials-binding
+ws-cleanup
+ansicolor
+github

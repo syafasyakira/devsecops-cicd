@@ -1,0 +1,225 @@
+pipeline {
+    agent any
+
+    environment {
+        // ── Ganti DOCKERHUB_USER dengan username Docker Hub kamu ──
+        DOCKERHUB_USER  = "your-dockerhub-username"
+        DOCKER_IMAGE    = "${DOCKERHUB_USER}/webapp-cicd"
+        DOCKER_TAG      = "${BUILD_NUMBER}"
+
+        // Port yang diekspos di App Server → host
+        APP_PORT        = "80"
+        CONTAINER_PORT  = "5000"
+        CONTAINER_NAME  = "webapp"
+
+        // IP App Server (pisahkan dengan spasi)
+        APP_SERVERS     = "10.34.100.178 10.34.100.179 10.34.100.180 10.34.100.181"
+
+        // ID credential SSH yang sudah didaftarkan di Jenkins
+        SSH_CREDENTIAL  = "deploy-ssh-key"
+        SSH_USER        = "deploy"
+    }
+
+    options {
+        // Hapus workspace sebelum build dimulai
+        skipDefaultCheckout(false)
+        // Warnai jika pipeline berjalan lebih dari 15 menit
+        timeout(time: 15, unit: 'MINUTES')
+        // Simpan maksimal 5 build terakhir
+        buildDiscarder(logRotator(numToKeepStr: '5'))
+        // Warnakan jika tidak ada perubahan
+        disableConcurrentBuilds()
+    }
+
+    stages {
+
+        // ─────────────────────────────────────────────────────────────
+        // Stage 1: Checkout
+        // ─────────────────────────────────────────────────────────────
+        stage('Checkout') {
+            steps {
+                echo "=== Stage: Checkout ==="
+                echo "Branch   : ${env.GIT_BRANCH}"
+                echo "Commit   : ${env.GIT_COMMIT}"
+                echo "Build    : #${BUILD_NUMBER}"
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Stage 2: Build Docker Image
+        // ─────────────────────────────────────────────────────────────
+        stage('Build') {
+            steps {
+                echo "=== Stage: Build ==="
+                script {
+                    sh """
+                        docker build \
+                            --build-arg BUILD_NUMBER=${BUILD_NUMBER} \
+                            -t ${DOCKER_IMAGE}:${DOCKER_TAG} \
+                            -t ${DOCKER_IMAGE}:latest \
+                            ./app
+                    """
+                    echo "Image berhasil dibuild: ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Stage 3: Test
+        // ─────────────────────────────────────────────────────────────
+        stage('Test') {
+            steps {
+                echo "=== Stage: Test ==="
+                script {
+                    // Jalankan test dalam container sementara, hapus setelah selesai
+                    sh """
+                        docker run --rm \
+                            -e BUILD_NUMBER=${BUILD_NUMBER} \
+                            --entrypoint "" \
+                            ${DOCKER_IMAGE}:${DOCKER_TAG} \
+                            sh -c "pip install pytest --quiet && python -m pytest tests/ -v"
+                    """
+                }
+            }
+            post {
+                failure {
+                    echo "Test GAGAL! Pipeline dihentikan."
+                }
+                success {
+                    echo "Semua test LULUS."
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Stage 4: Push Image ke Docker Hub
+        // ─────────────────────────────────────────────────────────────
+        stage('Push Image') {
+            steps {
+                echo "=== Stage: Push Image ==="
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh """
+                        echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
+                        docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
+                        docker push ${DOCKER_IMAGE}:latest
+                        docker logout
+                    """
+                }
+                echo "Image berhasil dipush ke Docker Hub: ${DOCKER_IMAGE}:${DOCKER_TAG}"
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Stage 5: Deploy ke App Servers
+        // ─────────────────────────────────────────────────────────────
+        stage('Deploy') {
+            steps {
+                echo "=== Stage: Deploy ==="
+                script {
+                    def servers = env.APP_SERVERS.split(' ')
+
+                    sshagent(credentials: [SSH_CREDENTIAL]) {
+                        servers.each { server ->
+                            echo "── Deploying ke ${server} ──"
+                            sh """
+                                ssh -o StrictHostKeyChecking=no ${SSH_USER}@${server} '
+                                    # Pull image terbaru
+                                    docker pull ${DOCKER_IMAGE}:${DOCKER_TAG}
+
+                                    # Hentikan dan hapus container lama jika ada
+                                    docker stop ${CONTAINER_NAME} 2>/dev/null || true
+                                    docker rm   ${CONTAINER_NAME} 2>/dev/null || true
+
+                                    # Jalankan container baru
+                                    docker run -d \
+                                        --name ${CONTAINER_NAME} \
+                                        --restart unless-stopped \
+                                        -p ${APP_PORT}:${CONTAINER_PORT} \
+                                        -e APP_VERSION=${DOCKER_TAG} \
+                                        -e BUILD_NUMBER=${BUILD_NUMBER} \
+                                        ${DOCKER_IMAGE}:${DOCKER_TAG}
+
+                                    # Hapus image lama (bukan latest & bukan yang baru)
+                                    docker image prune -f
+                                '
+                            """
+                            echo "Deploy ke ${server} SELESAI"
+                        }
+                    }
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Stage 6: Health Check
+        // ─────────────────────────────────────────────────────────────
+        stage('Health Check') {
+            steps {
+                echo "=== Stage: Health Check ==="
+                script {
+                    // Tunggu container startup
+                    sleep(time: 10, unit: 'SECONDS')
+
+                    def servers = env.APP_SERVERS.split(' ')
+                    def allHealthy = true
+
+                    sshagent(credentials: [SSH_CREDENTIAL]) {
+                        servers.each { server ->
+                            def result = sh(
+                                script: """
+                                    ssh -o StrictHostKeyChecking=no ${SSH_USER}@${server} \
+                                        'curl -sf http://localhost:${APP_PORT}/health > /dev/null && echo "OK" || echo "FAIL"'
+                                """,
+                                returnStdout: true
+                            ).trim()
+
+                            if (result == "OK") {
+                                echo "✓ ${server} — SEHAT"
+                            } else {
+                                echo "✗ ${server} — TIDAK SEHAT"
+                                allHealthy = false
+                            }
+                        }
+                    }
+
+                    if (!allHealthy) {
+                        error("Health check gagal pada satu atau lebih server!")
+                    }
+                }
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Post Actions: Notifikasi & Cleanup
+    // ─────────────────────────────────────────────────────────────────
+    post {
+        always {
+            echo "=== Pipeline Selesai ==="
+            // Hapus image lokal di Jenkins server untuk hemat disk
+            sh "docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || true"
+            sh "docker rmi ${DOCKER_IMAGE}:latest || true"
+        }
+        success {
+            echo """
+            ╔══════════════════════════════════════╗
+            ║  ✓ PIPELINE SUKSES                   ║
+            ║  App: ${DOCKER_IMAGE}:${DOCKER_TAG}  ║
+            ║  Deploy ke 4 server berhasil         ║
+            ╚══════════════════════════════════════╝
+            """
+        }
+        failure {
+            echo """
+            ╔══════════════════════════════════════╗
+            ║  ✗ PIPELINE GAGAL                    ║
+            ║  Periksa console output di atas      ║
+            ╚══════════════════════════════════════╝
+            """
+        }
+    }
+}
