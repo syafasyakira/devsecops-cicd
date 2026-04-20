@@ -26,7 +26,7 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                sh "docker build --build-arg BUILD_NUMBER=${BUILD_NUMBER} -t ${IMAGE_NAME}:${IMAGE_TAG} ."
             }
         }
 
@@ -40,7 +40,7 @@ pipeline {
             steps {
                 sh "docker stop ${CONTAINER_NAME} || true"
                 sh "docker rm   ${CONTAINER_NAME} || true"
-                sh "docker run -d --name ${CONTAINER_NAME} -p ${APP_PORT}:5000 ${IMAGE_NAME}:${IMAGE_TAG}"
+                sh "docker run -d --name ${CONTAINER_NAME} -p ${APP_PORT}:5000 -e BUILD_NUMBER=${BUILD_NUMBER} ${IMAGE_NAME}:${IMAGE_TAG}"
             }
         }
 
